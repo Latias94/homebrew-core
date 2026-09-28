@@ -23,6 +23,8 @@ class Typespeed < Formula
 
   uses_from_macos "ncurses"
 
+  deny_network_access!
+
   def install
     # Work around failure from GCC 10+ using default of `-fno-common`
     # multiple definition of `rules'; typespeed-file.o:(.bss+0x2050): first defined here
@@ -40,5 +42,28 @@ class Typespeed < Formula
     inreplace "testsuite/Makefile.in", "gcc", ENV.cc
     system "./configure", *args, *std_configure_args
     system "make", "install"
+  end
+
+  test do
+    require "expect"
+    require "io/console"
+    require "pty"
+
+    output = +""
+    PTY.spawn({ "TERM" => "xterm" }, bin/"typespeed") do |r, w, pid|
+      r.winsize = [24, 80]
+      refute_nil r.expect("Choose: ", 10), "Expected main menu"
+      w.write "7" # Quit
+      begin
+        r.each_line { |line| output << line }
+      rescue Errno::EIO
+        # GNU/Linux raises EIO when read is done on closed pty
+      end
+      Process.wait(pid)
+      assert_equal 0, $CHILD_STATUS.exitstatus
+    end
+    assert_match "Typespeed v#{version}", output
+    assert_match "Best score was:", output
+    assert_match(/Score:\t\t0/, output)
   end
 end
