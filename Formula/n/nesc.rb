@@ -35,6 +35,8 @@ class Nesc < Formula
   uses_from_macos "gperf" => :build
   uses_from_macos "m4" => :build
 
+  deny_network_access!
+
   def install
     # Fix compile with newer Clang
     ENV.append_to_cflags "-Wno-implicit-function-declaration" if DevelopmentTools.clang_build_version >= 1403
@@ -47,8 +49,71 @@ class Nesc < Formula
     ENV.deparallelize
 
     system "./Bootstrap"
-    system "./configure", "--disable-debug", "--disable-dependency-tracking", "--prefix=#{prefix}"
+    system "./configure", *std_configure_args
     system "make"
     system "make", "install"
+  end
+
+  test do
+    (testpath/"Check.nc").write <<~NESC
+      interface Check {
+        command void check();
+        event void checkDone(int result);
+      }
+    NESC
+
+    (testpath/"Module.nc").write <<~NESC
+      generic module Module(int result) {
+        provides interface Check;
+      } implementation {
+        command void Check.check() {
+          signal Check.checkDone(result);
+        }
+      }
+    NESC
+
+    (testpath/"TestP.nc").write <<~NESC
+      #include <stdio.h>
+
+      module TestP {
+        uses interface Check as Yes;
+        uses interface Check as No;
+      } implementation {
+        int main() @C() @spontaneous() {
+          call Yes.check();
+          call No.check();
+          return 0;
+        }
+
+        event void Yes.checkDone(int result) {
+          printf("Yes -> %d\\n", result);
+        }
+
+        event void No.checkDone(int result) {
+          printf("No -> %d\\n", result);
+        }
+      }
+    NESC
+
+    (testpath/"test.nc").write <<~NESC
+      configuration test {
+      } implementation {
+        components TestP;
+        components new Module(6 * 7 == 42) as YesM;
+        components new Module(6 * 7 != 42) as NoM;
+
+        TestP.Yes -> YesM;
+        TestP.No -> NoM;
+      }
+    NESC
+
+    system lib/"ncc/nesc1", "-fnesc-separator=__",
+           "-fnesc-include=#{lib}/ncc/deputy_nodeputy",
+           "-fnesc-include=#{lib}/ncc/nesc_nx",
+           "test.nc", "-o", "test.c"
+    assert_match "TestP__Yes__checkDone", (testpath/"test.c").read
+
+    system ENV.cc, "test.c", "-o", "test"
+    assert_equal "Yes -> 1\nNo -> 0\n", shell_output("./test")
   end
 end
