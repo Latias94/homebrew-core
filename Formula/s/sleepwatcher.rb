@@ -27,6 +27,8 @@ class Sleepwatcher < Formula
 
   depends_on :macos
 
+  deny_network_access!
+
   def install
     # Adjust Makefile to build native binary only
     inreplace "sources/Makefile" do |s|
@@ -61,5 +63,29 @@ class Sleepwatcher < Formula
         ~/.sleep
         ~/.wakeup
     EOS
+  end
+
+  test do
+    assert_match "sleepwatcher #{version}", shell_output("#{sbin}/sleepwatcher -v", 2)
+    assert_match(/\A\d+\Z/, shell_output("#{sbin}/sleepwatcher -g"))
+
+    # Run the daemon with a 0.1 second idle timeout and wait for the idle command to fire
+    pid = spawn "#{sbin}/sleepwatcher", "-V", "-p", "#{testpath}/sleepwatcher.pid",
+                "-t", "1", "-i", "echo idle > #{testpath}/idle",
+                out: (testpath/"out.log").to_s, err: (testpath/"err.log").to_s
+    begin
+      20.times do
+        break if (testpath/"out.log").exist? && (testpath/"out.log").read.include?("idle: ")
+
+        sleep 0.5
+      end
+      assert_equal pid.to_s, (testpath/"sleepwatcher.pid").read
+      assert_match "sleepwatcher: idle: echo idle", (testpath/"out.log").read
+      assert_equal "idle", (testpath/"idle").read.strip
+    ensure
+      Process.kill("TERM", pid)
+      Process.wait(pid)
+    end
+    assert_match "got SIGTERM - exiting", (testpath/"out.log").read
   end
 end
