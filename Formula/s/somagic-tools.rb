@@ -24,8 +24,27 @@ class SomagicTools < Formula
   depends_on "libgcrypt"
   depends_on "libusb"
 
+  deny_network_access!
+
   def install
     system "make"
     system "make", "PREFIX=#{prefix}", "install"
+  end
+
+  test do
+    # Fake driver file containing a 6634-byte EasyCAP002 firmware image with a valid CRC32
+    firmware = ["0c94cc00"].pack("H*") + ("\0" * 6626) + ["d96890a3"].pack("H*")
+    (testpath/"driver.sys").binwrite(("\0" * 16) + firmware + ("\0" * 16))
+
+    output = shell_output("#{bin}/somagic-extract-firmware -v -f #{testpath}/firmware.bin " \
+                          "#{testpath}/driver.sys 2>&1")
+    assert_match "Product: 1, Expected: 1f fe de bb, Found: 1f fe de bb, Offset: 10", output
+    assert_match "Firmware written to '#{testpath}/firmware.bin'.", output
+    assert_equal firmware, (testpath/"firmware.bin").binread
+
+    (testpath/"bad.sys").binwrite(("\0" * 16) + ["0c94cc00"].pack("H*") + ("\xff".b * 6646))
+    output = shell_output("#{bin}/somagic-extract-firmware -f #{testpath}/bad.bin #{testpath}/bad.sys 2>&1", 1)
+    assert_match "Somagic firmware was not found in driver file.", output
+    refute_path_exists testpath/"bad.bin"
   end
 end
