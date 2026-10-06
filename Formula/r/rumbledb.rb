@@ -1,8 +1,8 @@
 class Rumbledb < Formula
   desc "JSONiq and XQuery query engine on Apache Spark"
   homepage "https://rumbledb.org/"
-  url "https://github.com/RumbleDB/rumble/releases/download/v2.1.0/rumbledb-2.1.0-brew.zip"
-  sha256 "250b9a79e6fed34c595f75bb60d786b366e335c361169d1447538442fd32f29b"
+  url "https://github.com/RumbleDB/rumble/releases/download/v3.0.0/rumbledb-3.0.0-brew.zip"
+  sha256 "0662af94248c025c921aac56c16656be3d5e893800abb8f988bddb512ebea14c"
   license "Apache-2.0"
 
   livecheck do
